@@ -1,0 +1,2 @@
+class EnvironmentVariablesException(Exception):
+    pass
