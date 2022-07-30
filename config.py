@@ -4,7 +4,7 @@ LOG_FILE_NAME = 'bot.log'
 BYTES_PER_LOG = 50000000
 LOG_ROTATION_COUNT = 5
 
-ENDPOINT = 'https://practicum.yandex.ru/api/user_api/homework_statusess/'
+ENDPOINT = 'https://practicum.yandex.ru/api/user_api/homework_statuses/'
 
 
 HOMEWORK_STATUSES = {
