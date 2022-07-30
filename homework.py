@@ -3,26 +3,37 @@ import os
 import sys
 import time
 import typing
+from http import HTTPStatus
+from logging.handlers import RotatingFileHandler
 
 import requests
 import telegram
 from dotenv import load_dotenv
 
 import config as cfg
-from exceptions import (EnvironmentVariablesException, HomeworkKeyNotFound,
-                        IncorrectHomeworkStatus, InvalidJSONResponseException,
+from exceptions import (CantSentTelegramMessage, GenericEndpointError,
+                        HomeworksKeyNotFound, IncorrectHomeworkStatus,
+                        InvalidJSONResponseException,
                         YandexAPIResponseIsNot200)
 
 load_dotenv()
 
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
-handler = logging.StreamHandler(stream=sys.stdout)
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO)
+
 formatter = logging.Formatter(
-    '%(asctime)s [%(levelname)s] %(message)s'
+    '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+handler = RotatingFileHandler(
+    cfg.LOG_FILE_NAME, maxBytes=cfg.BYTES_PER_LOG,
+    backupCount=cfg.LOG_ROTATION_COUNT
 )
 handler.setFormatter(formatter)
+
+logger = logging.getLogger(__name__)
 logger.addHandler(handler)
+
 
 PRACTICUM_TOKEN = os.getenv('PRACTICUM_TOKEN')
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
@@ -33,11 +44,15 @@ HEADERS = {'Authorization': f'OAuth {PRACTICUM_TOKEN}'}
 
 def send_message(bot: telegram.Bot, message: str) -> None:
     """Отправляет сообщение в чат телеграмм."""
+    logger.info(cfg.INF_START_SEND_MESSAGE)
     try:
         bot.send_message(TELEGRAM_CHAT_ID, message)
+    except telegram.error.TelegramError as error:
+        raise CantSentTelegramMessage(
+            cfg.ERR_TELEGRAMM_FALL_SEND_MSG.format(error)
+        )
+    else:
         logger.info(cfg.INF_SUCCESS_SEND_MESSAGE.format(message))
-    except Exception as error:
-        logger.error(cfg.ERR_TELEGRAMM_FALL_SEND_MSG.format(error))
 
 
 def send_error_message(bot: telegram.Bot, message: str) -> None:
@@ -50,13 +65,26 @@ def get_api_answer(current_timestamp: int) -> dict:
     """Запрашивает информацию о домашней работе через Яндекс API."""
     timestamp = current_timestamp or int(time.time())
     params = {'from_date': timestamp}
-    response = requests.get(cfg.ENDPOINT, params=params, headers=HEADERS)
-    if response.status_code != 200:
-        raise YandexAPIResponseIsNot200(
+    logger.info(cfg.INF_START_API_CALL)
+    try:
+        response = requests.get(cfg.ENDPOINT, params=params, headers=HEADERS)
+    except Exception as error:
+        raise GenericEndpointError(cfg.ERR_GENERIC_MESSAGE.format(error))
+
+    if response.status_code != HTTPStatus.OK:
+        logger.debug(
             cfg.ERR_API_RESPONSE_NOT_200.format(
-                cfg.ENDPOINT, response.status_code
+                cfg.ENDPOINT, response.status_code,
+                response.reason, response.text
             )
         )
+        raise YandexAPIResponseIsNot200(
+            cfg.ERR_API_RESPONSE_NOT_200.format(
+                cfg.ENDPOINT, response.status_code,
+                response.reason, 'см. в debug режиме'
+            )
+        )
+
     return response.json()
 
 
@@ -66,7 +94,7 @@ def check_response(response: dict) -> typing.Union[dict, None]:
         raise TypeError(cfg.ERR_API_RESPONSE_TYPE)
 
     if 'homeworks' not in response:
-        raise HomeworkKeyNotFound(cfg.ERR_HOMEWORK_KEY_NOT_FOUND)
+        raise HomeworksKeyNotFound(cfg.ERR_HOMEWORKS_KEY_NOT_FOUND)
 
     if type(response['homeworks']) != list:
         raise InvalidJSONResponseException(cfg.ERR_INVALID_JSON_YANDEX_API)
@@ -76,8 +104,14 @@ def check_response(response: dict) -> typing.Union[dict, None]:
 
 def parse_status(homework: dict) -> typing.Union[str, None]:
     """Извлекает статус проверки конкретной домашней работы."""
-    homework_name = homework['homework_name']
-    homework_status = homework['status']
+    homework_name = homework.get('homework_name')
+    if not homework_name:
+        raise KeyError(
+            cfg.ERR_HOMEWORK_KEY_NOT_FOUND.format(homework)
+        )
+    homework_status = homework.get('status')
+    if not homework_status:
+        raise KeyError(cfg.ERR_STATUS_KEY_NOT_FOUND.format(homework))
     verdict = cfg.HOMEWORK_STATUSES.get(homework_status)
     if verdict:
         return cfg.INF_HOMEWORK_STATUS_CHANGED.format(homework_name, verdict)
@@ -91,19 +125,16 @@ def parse_status(homework: dict) -> typing.Union[str, None]:
 
 def check_tokens() -> bool:
     """Проверяет наличие необходимых токенов в файле .env."""
-    if all((PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID)):
-        return True
-    else:
-        return False
+    return all((PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID))
 
 
 def main():
     """Основная логика работы бота."""
-    FIRST_ENDPOINT_ERROR = True
+    last_message = ''
 
     if not check_tokens():
         logger.critical(cfg.ERR_NO_TOKENS)
-        raise EnvironmentVariablesException(cfg.ERR_NO_TOKENS)
+        sys.exit(cfg.ERR_NO_TOKENS)
 
     current_timestamp = int(time.time())
     bot = telegram.Bot(token=TELEGRAM_TOKEN)
@@ -113,18 +144,24 @@ def main():
             response = get_api_answer(current_timestamp)
             logger.info(cfg.INF_GET_HOMEWORK_STATUS.format(cfg.ENDPOINT))
             homeworks = check_response(response)
-            if len(homeworks) > 0:
+            if homeworks:
                 for homework in homeworks:
                     send_message(bot, parse_status(homework))
             else:
-                logger.debug(cfg.INF_NO_CHANGES)
+                logger.info(cfg.INF_NO_CHANGES)
             current_timestamp = response['current_date']
+        except CantSentTelegramMessage as error:
+            message = cfg.ERR_GENERIC_MESSAGE.format(error)
+            logger.error(message)
+        except telegram.error.Unauthorized as error:
+            message = cfg.ERR_GENERIC_MESSAGE.format(error)
+            logger.error(message)
         except YandexAPIResponseIsNot200 as error:
             message = cfg.ERR_GENERIC_MESSAGE.format(error)
             logger.error(message)
-            if FIRST_ENDPOINT_ERROR:
+            if message != last_message:
                 send_message(bot, message)
-                FIRST_ENDPOINT_ERROR = False
+                last_message = message
         except Exception as error:
             message = cfg.ERR_GENERIC_MESSAGE.format(error)
             send_error_message(bot, message)

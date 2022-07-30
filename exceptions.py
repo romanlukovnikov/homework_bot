@@ -1,4 +1,4 @@
-class EnvironmentVariablesException(Exception):
+class CantSentTelegramMessage(Exception):
     pass
 
 class InvalidJSONResponseException(Exception):
@@ -10,6 +10,15 @@ class YandexAPIResponseIsNot200(Exception):
 class IncorrectHomeworkStatus(Exception):
     pass
 
-class HomeworkKeyNotFound(Exception):
+class HomeworksKeyNotFound(Exception):
+    pass
+
+class HomeworkNameKeyNotFound(Exception):
+    pass
+
+class StatusKeyNotFound(Exception):
+    pass
+
+class GenericEndpointError(Exception):
     pass
 
