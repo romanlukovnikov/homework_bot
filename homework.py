@@ -153,9 +153,6 @@ def main():
         except CantSentTelegramMessage as error:
             message = cfg.ERR_GENERIC_MESSAGE.format(error)
             logger.error(message)
-        except telegram.error.Unauthorized as error:
-            message = cfg.ERR_GENERIC_MESSAGE.format(error)
-            logger.error(message)
         except YandexAPIResponseIsNot200 as error:
             message = cfg.ERR_GENERIC_MESSAGE.format(error)
             logger.error(message)
