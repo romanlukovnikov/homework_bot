@@ -3,7 +3,7 @@ RETRY_TIME = 600
 LOG_FILE_NAME = 'bot.log'
 BYTES_PER_LOG = 50000000
 LOG_ROTATION_COUNT = 5
-
+MAX_TLGR_MESSAGE_LENGTH = 4096
 ENDPOINT = 'https://practicum.yandex.ru/api/user_api/homework_statuses/'
 
 
@@ -28,7 +28,7 @@ INF_NO_CHANGES = (
 )
 ERR_API_RESPONSE_NOT_200 = (
     'статус-код подключения к ендпоинту {} не равен 200. '
-    'response.status_code: {}. response.reason: {}. response.text: {}.'
+    'response.status_code: {}. response.reason: {}.'
 )
 ERR_INVALID_JSON_YANDEX_API = (
     'Неверный формат JSON ответа API сервера Яндекса'
@@ -43,6 +43,7 @@ ERR_TELEGRAMM_FALL_SEND_MSG = (
 ERR_WRONG_HOMEWORK_STATUS = 'Статус {} не входит в список ожидаемых: {}'
 ERR_GENERIC_MESSAGE = 'Сбой в работе программы: {}'
 ERR_HOMEWORKS_KEY_NOT_FOUND = 'В ответе Яндекс API не найден ключ "homeworks"'
+ERR_CURRENT_DATE_KEY_NOT_FOUND = 'Не найден ключ "current_date"'
 ERR_HOMEWORK_KEY_NOT_FOUND = 'В словаре {} не найден ключ "homework_name"'
 ERR_STATUS_KEY_NOT_FOUND = 'В словаре {} не найден ключи "status"'
 ERR_API_RESPONSE_TYPE = 'Ответ от Яндекс API не является словарём'

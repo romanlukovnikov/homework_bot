@@ -5,35 +5,38 @@ import time
 import typing
 from http import HTTPStatus
 from logging.handlers import RotatingFileHandler
+from typing import Type
 
 import requests
 import telegram
 from dotenv import load_dotenv
 
 import config as cfg
-from exceptions import (CantSentTelegramMessage, GenericEndpointError,
-                        HomeworksKeyNotFound, IncorrectHomeworkStatus,
-                        InvalidJSONResponseException,
+from exceptions import (CantSentTelegramMessage, CurrentDateKeyNotFound,
+                        GenericEndpointError, HomeworksKeyNotFound,
+                        IncorrectHomeworkStatus, InvalidJSONResponseException,
                         YandexAPIResponseIsNot200)
+
+last_message = {
+    'YandexAPIResponseIsNot200': '',
+    'Exception': '',
+}
 
 load_dotenv()
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO)
-
-formatter = logging.Formatter(
-    '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=logging.INFO,
+    handlers=(
+        RotatingFileHandler(
+            cfg.LOG_FILE_NAME, maxBytes=cfg.BYTES_PER_LOG,
+            backupCount=cfg.LOG_ROTATION_COUNT
+        ),
+        logging.StreamHandler(),
+    ),
 )
-handler = RotatingFileHandler(
-    cfg.LOG_FILE_NAME, maxBytes=cfg.BYTES_PER_LOG,
-    backupCount=cfg.LOG_ROTATION_COUNT
-)
-handler.setFormatter(formatter)
 
 logger = logging.getLogger(__name__)
-logger.addHandler(handler)
-
 
 PRACTICUM_TOKEN = os.getenv('PRACTICUM_TOKEN')
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
@@ -55,12 +58,6 @@ def send_message(bot: telegram.Bot, message: str) -> None:
         logger.info(cfg.INF_SUCCESS_SEND_MESSAGE.format(message))
 
 
-def send_error_message(bot: telegram.Bot, message: str) -> None:
-    """Отправляет сообщение об ошибке в терминал и телеграмм."""
-    logger.error(message)
-    send_message(bot, message)
-
-
 def get_api_answer(current_timestamp: int) -> dict:
     """Запрашивает информацию о домашней работе через Яндекс API."""
     timestamp = current_timestamp or int(time.time())
@@ -72,16 +69,10 @@ def get_api_answer(current_timestamp: int) -> dict:
         raise GenericEndpointError(cfg.ERR_GENERIC_MESSAGE.format(error))
 
     if response.status_code != HTTPStatus.OK:
-        logger.debug(
-            cfg.ERR_API_RESPONSE_NOT_200.format(
-                cfg.ENDPOINT, response.status_code,
-                response.reason, response.text
-            )
-        )
         raise YandexAPIResponseIsNot200(
             cfg.ERR_API_RESPONSE_NOT_200.format(
                 cfg.ENDPOINT, response.status_code,
-                response.reason, 'см. в debug режиме'
+                response.reason
             )
         )
 
@@ -90,16 +81,20 @@ def get_api_answer(current_timestamp: int) -> dict:
 
 def check_response(response: dict) -> typing.Union[dict, None]:
     """Проверяет наличине необходимых ключей в ответе от Яндекс API."""
-    if type(response) != dict:
+    if not isinstance(response, dict):
         raise TypeError(cfg.ERR_API_RESPONSE_TYPE)
 
-    if 'homeworks' not in response:
+    if 'current_date' not in response:
+        raise CurrentDateKeyNotFound(cfg.ERR_CURRENT_DATE_KEY_NOT_FOUND)
+
+    homeworks = response.get('homeworks')
+    if homeworks is None:
         raise HomeworksKeyNotFound(cfg.ERR_HOMEWORKS_KEY_NOT_FOUND)
 
-    if type(response['homeworks']) != list:
+    if not isinstance(homeworks, list):
         raise InvalidJSONResponseException(cfg.ERR_INVALID_JSON_YANDEX_API)
 
-    return response['homeworks']
+    return homeworks
 
 
 def parse_status(homework: dict) -> typing.Union[str, None]:
@@ -128,10 +123,22 @@ def check_tokens() -> bool:
     return all((PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID))
 
 
+def log_error(
+    bot: telegram.Bot, exception_name: str, error: Type[Exception]
+) -> None:
+    """
+    Отправляет сообщение об ошибке в журнал и телеграм.
+    В телеграм при условии, что это новое сообщение.
+    """
+    message = cfg.ERR_GENERIC_MESSAGE.format(error)
+    logger.error(message)
+    if message != last_message[exception_name]:
+        send_message(bot, message[:cfg.MAX_TLGR_MESSAGE_LENGTH])
+        last_message[exception_name] = message
+
+
 def main():
     """Основная логика работы бота."""
-    last_message = ''
-
     if not check_tokens():
         logger.critical(cfg.ERR_NO_TOKENS)
         sys.exit(cfg.ERR_NO_TOKENS)
@@ -154,14 +161,9 @@ def main():
             message = cfg.ERR_GENERIC_MESSAGE.format(error)
             logger.error(message)
         except YandexAPIResponseIsNot200 as error:
-            message = cfg.ERR_GENERIC_MESSAGE.format(error)
-            logger.error(message)
-            if message != last_message:
-                send_message(bot, message)
-                last_message = message
+            log_error(bot, 'YandexAPIResponseIsNot200', error)
         except Exception as error:
-            message = cfg.ERR_GENERIC_MESSAGE.format(error)
-            send_error_message(bot, message)
+            log_error(bot, 'Exception', error)
         finally:
             time.sleep(cfg.RETRY_TIME)
 
