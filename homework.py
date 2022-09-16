@@ -6,7 +6,6 @@ import typing
 from http import HTTPStatus
 from logging.handlers import RotatingFileHandler
 from typing import Type
-import hvac
 
 import requests
 import telegram
