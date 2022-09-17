@@ -37,7 +37,7 @@ TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
 
 
 logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    format='%(asctime)s - %(levelname)s - %(message)s',
     level=logging.INFO,
     handlers=(
         logging.StreamHandler(),
@@ -49,7 +49,7 @@ logger = logging.getLogger(__name__)
 
 def send_message(bot: telegram.Bot, message: str) -> None:
     """Отправляет сообщение в чат телеграмм."""
-    logger.info('Sending bot message.')
+    logger.info('Send message to telegram chat')
     try:
         bot.send_message(TELEGRAM_CHAT_ID, message)
     except telegram.error.TelegramError as error:
@@ -57,14 +57,14 @@ def send_message(bot: telegram.Bot, message: str) -> None:
             'Error to send message in telegram: {}'.format(error)
         )
     else:
-        logger.info(f'Message sent. Text: {message}')
+        logger.info(f'Telegram message sent. Text: {message}')
 
 
 def get_api_answer(current_timestamp: int) -> dict:
     """Запрашивает информацию о домашней работе через Яндекс API."""
     timestamp = current_timestamp or int(time.time())
     params = {'from_date': timestamp}
-    logger.info('Sending request to Yandex API.')
+    logger.info('Request Homework Yandex API')
     HEADERS = {'Authorization': f'OAuth {PRACTICUM_TOKEN}'}
     try:
         response = requests.get(ENDPOINT, params=params, headers=HEADERS)
@@ -73,7 +73,7 @@ def get_api_answer(current_timestamp: int) -> dict:
 
     if response.status_code != HTTPStatus.OK:
         raise YandexAPIResponseIsNot200(
-            'Http response from Yandex API is not 200'
+            'Http response from Homework Yandex API is not 200. '
             'response.status_code: {}. response.reason: {}.'.format(
                 response.status_code,
                 response.reason
@@ -89,14 +89,18 @@ def check_response(response: dict) -> typing.Union[dict, None]:
         raise TypeError('Yandex API response is not a dictionary type')
 
     if 'current_date' not in response:
-        raise CurrentDateKeyNotFound('No key "current_date" in Yandex API response.')
+        raise CurrentDateKeyNotFound(
+            'No key "current_date" in Yandex API response'
+        )
 
     homeworks = response.get('homeworks')
     if homeworks is None:
-        raise HomeworksKeyNotFound('No key "homeworks" in Yandex API response.')
+        raise HomeworksKeyNotFound('No key "homeworks" in Yandex API response')
 
     if not isinstance(homeworks, list):
-        raise InvalidJSONResponseException('Invalid JSON format in Yandex API response')
+        raise InvalidJSONResponseException(
+            'Invalid JSON format in Yandex API response'
+        )
 
     return homeworks
 
@@ -113,7 +117,9 @@ def parse_status(homework: dict) -> typing.Union[str, None]:
         raise KeyError('No key "status" in dictionary {}'.format(homework))
     verdict = HOMEWORK_STATUSES.get(homework_status)
     if verdict:
-        return 'Homework status was changed "{}". {}'.format(homework_name, verdict)
+        return 'Статус работы "{}" изменился. {}'.format(
+            homework_name, verdict
+        )
     else:
         raise IncorrectHomeworkStatus(
             'Status {} unknown. Known statuses: {}'.format(
@@ -159,13 +165,13 @@ def main():
     while True:
         try:
             response = get_api_answer(current_timestamp)
-            logger.info('Response was sent by Yandex API')
+            logger.info('Response reseived from Homework Yandex API')
             homeworks = check_response(response)
             if homeworks:
                 for homework in homeworks:
                     send_message(bot, parse_status(homework))
             else:
-                logger.info('No changes in homework status.')
+                logger.info('No changes in homework status detected')
             current_timestamp = response['current_date']
         except CantSentTelegramMessage as error:
             message = 'Error in application: {}'.format(error)
