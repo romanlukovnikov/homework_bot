@@ -15,10 +15,6 @@ from exceptions import (CantSentTelegramMessage, CurrentDateKeyNotFound,
                         IncorrectHomeworkStatus, InvalidJSONResponseException,
                         YandexAPIResponseIsNot200)
 
-PRACTICUM_TOKEN = ''
-TELEGRAM_TOKEN = ''
-TELEGRAM_CHAT_ID = ''
-
 HOMEWORK_STATUSES = {
     'approved': 'Работа проверена: критических замечаний нет!',
     'reviewing': 'Работа взята на проверку.',
@@ -35,6 +31,10 @@ load_dotenv()
 RETRY_TIME = int(os.getenv('RETRY_TIME'))
 MAX_TLGR_MESSAGE_LENGTH = int(os.getenv('MAX_TLGR_MESSAGE_LENGTH'))
 ENDPOINT = os.getenv('ENDPOINT')
+PRACTICUM_TOKEN = os.getenv('PRACTICUM_TOKEN')
+TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
+TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
+
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -45,13 +45,6 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger(__name__)
-
-
-def get_tokens():
-    global PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID
-    PRACTICUM_TOKEN = os.getenv('PRACTICUM_TOKEN')
-    TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
-    TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
 
 
 def send_message(bot: telegram.Bot, message: str) -> None:
@@ -150,8 +143,6 @@ def log_error(
 
 def main():
     """Основная логика работы бота."""
-    get_tokens()
-
     if not check_tokens():
         logger.critical(
             'Not set some tokens in environment variables: '
