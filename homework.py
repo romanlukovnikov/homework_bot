@@ -10,12 +10,18 @@ from typing import Type
 import requests
 import telegram
 from dotenv import load_dotenv
+import hvac
+import base64
 
 import config as cfg
 from exceptions import (CantSentTelegramMessage, CurrentDateKeyNotFound,
                         GenericEndpointError, HomeworksKeyNotFound,
                         IncorrectHomeworkStatus, InvalidJSONResponseException,
                         YandexAPIResponseIsNot200)
+
+PRACTICUM_TOKEN = ''
+TELEGRAM_TOKEN = ''
+TELEGRAM_CHAT_ID = ''
 
 last_message = {
     'YandexAPIResponseIsNot200': '',
@@ -38,11 +44,76 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-PRACTICUM_TOKEN = os.getenv('PRACTICUM_TOKEN')
-TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
-TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
 
-HEADERS = {'Authorization': f'OAuth {PRACTICUM_TOKEN}'}
+def get_tokens():
+    global PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID
+    if os.getenv('RUNTIME_ENVIRONMENT') == 'container':
+        get_vault_secrets()
+    else:
+        PRACTICUM_TOKEN = os.getenv('PRACTICUM_TOKEN')
+        TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
+        TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
+
+
+def get_vault_secrets():
+    client = hvac.Client(url='http://51.250.68.170:8200')
+    if not client.sys.is_initialized():
+        result = client.sys.initialize(5, 3)
+        root_token = result['root_token']
+        keys = result['keys']
+        client.sys.submit_unseal_keys(keys)
+        client.token = root_token
+        assert client.is_authenticated()
+        client.sys.enable_secrets_engine(
+            backend_type='kv',
+            path='secret',
+        )
+        init_secrets = {
+            'TELEGRAM_TOKEN': '',
+            'PRACTICUM_TOKEN': '',
+            'TELEGRAM_CHAT_ID': '',
+        }   
+        client.secrets.kv.v1.create_or_update_secret(
+            path='chat-bot',
+            secret=init_secrets,
+        )
+        with open('rtkn', 'w') as f:
+            f.write(root_token)
+        with open('keys', 'w') as f1:
+            for key in keys:
+                f1.write(f'{key}\n')
+        logger.info(f'You should add your tokens in vault: http://127.0.0.1:8200 using root token:{root_token}')
+    else:
+        if client.sys.is_sealed():
+            unsealed_vault(client)
+        with open('rtkn', 'r') as f:
+            root_token = f.read()
+        client.token = root_token
+        assert client.is_authenticated()
+    wait_for_vault_tokens(client)
+
+
+def unsealed_vault(client):
+    keys = []
+    with open('keys', 'r') as f:
+        for line in f:
+            keys.append(line.rstrip('\n'))
+    client.sys.submit_unseal_keys(keys)
+
+
+def wait_for_vault_tokens(client):
+    global PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID
+    get_all_tokens = False
+    while not get_all_tokens:
+        tokens = client.secrets.kv.v1.read_secret(path='chat-bot')
+        PRACTICUM_TOKEN = tokens['data']['PRACTICUM_TOKEN']
+        TELEGRAM_TOKEN = tokens['data']['TELEGRAM_TOKEN']
+        TELEGRAM_CHAT_ID = tokens['data']['TELEGRAM_CHAT_ID']
+        if check_tokens():
+            get_all_tokens = True
+        else:
+            logger.info('Some tokens are empty. Waiting for values...')
+            time.sleep(cfg.WAIT_FOR_VAULT_KEYS)
 
 
 def send_message(bot: telegram.Bot, message: str) -> None:
@@ -63,6 +134,7 @@ def get_api_answer(current_timestamp: int) -> dict:
     timestamp = current_timestamp or int(time.time())
     params = {'from_date': timestamp}
     logger.info(cfg.INF_START_API_CALL)
+    HEADERS = {'Authorization': f'OAuth {PRACTICUM_TOKEN}'}
     try:
         response = requests.get(cfg.ENDPOINT, params=params, headers=HEADERS)
     except Exception as error:
@@ -139,6 +211,8 @@ def log_error(
 
 def main():
     """Основная логика работы бота."""
+    get_tokens()
+
     if not check_tokens():
         logger.critical(cfg.ERR_NO_TOKENS)
         sys.exit(cfg.ERR_NO_TOKENS)
