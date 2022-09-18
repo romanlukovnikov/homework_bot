@@ -94,6 +94,7 @@ sudo apt install python3-pip
 ```
 * **Установить виртуальное окружение для выполнения Python программ**
 ```sh
+cd homework_bot/
 python3 -m venv venv
 ```
 * **Активировать виртуальное окружение**
@@ -102,7 +103,6 @@ source venv/bin/activate
 ```
 * **Установить зависимости проекта в виртуальное окружение**
 ```sh
-cd homework_bot/
 pip3 install -r requirements.txt
 ```
 * **Запустить программу**
