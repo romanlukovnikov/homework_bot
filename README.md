@@ -77,3 +77,40 @@ docker logs yabot
 2022-09-18 06:25:54,097 - INFO - Response reseived from Homework Yandex API
 2022-09-18 06:25:54,097 - INFO - No changes in homework status detected
 ```
+Запуск чат-бота в командной оболочке Linux (подходит для разработки и тестирования)
+--------------------
+
+* **Склонировать репозиторий чат-бота на локальный сервер.** 
+```sh
+git clone https://github.com/romanlukovnikov/homework_bot.git
+```
+* **Скопировать файл .env в папку проекта**
+```sh
+cp .env homework_bot/
+```
+* **Установить Package Installer for Python**
+```sh
+sudo apt install python3-pip
+```
+* **Установить виртуальное окружение для выполнения Python программ**
+```sh
+python3 -m venv venv
+```
+* **Активировать виртуальное окружение**
+```sh
+source venv/bin/activate
+```
+* **Установить зависимости проекта в виртуальное окружение**
+```sh
+pip3 install -r requirements.txt
+```
+* **Запустить программу**
+```sh
+python3 homework.py
+```
+Если все параметры настроены правильно, должны появиться следующие строчки в журнале (время будет актуальным):
+```sh
+2022-09-18 06:25:53,507 - INFO - Request Homework Yandex API
+2022-09-18 06:25:54,097 - INFO - Response reseived from Homework Yandex API
+2022-09-18 06:25:54,097 - INFO - No changes in homework status detected
+```
