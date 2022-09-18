@@ -13,103 +13,76 @@
 
 * **Отправка уведомлений в Telegram**: В случае определения изменений в статусе проверки домашнего задания студента telegram-бот отправляет сообщение получателю в telegram.
 
-* **Журналирование работы и ошибок**: Все основные шаги работы программы журналируются в STDOUT. Информация о ключевых ошибках отправляется получателю в telegram.
+* **Журналирование работы и ошибок**: Все основные шаги работы программы журналируются в `STDOUT`. Информация о ключевых ошибках отправляется получателю в telegram.
 
 Предварительные условия
 -------------------------------
 
 Для запуска чат-бота необходимо:
-* **Создать эккаунт Telegram-бота** - для этого используется служебный бот @BotFather. Официальная документация [Telegram bots ](https://core.telegram.org/bots).
-* **Получить токен для работы с Bot API** - токен отправляется при создании вашего бота. Пример токена: `123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11`
+* **Наличие среды для запуска чат-бота** - в данной инструкции приведены сведения для запуска программы на `Ubuntu 20.04.3 LTS`. Возможен запуск и на Windows системах или на хостингах, представляющие сервис запуска Python программ. Предпочтительным вариантов является среда, в которой чат-бот сможет функционировать 24*7. Время последнего обращения к API Яндекс Практикума не запоминается в постоянной памяти, поэтому изменения в состоянии проверки домашней работы, которые произошли во время остановки чат-бота обнаружены не будут.
+
+* **Создать эккаунт Telegram-бота** - для этого используется служебный бот `@BotFather`. Официальная документация [Telegram bots ](https://core.telegram.org/bots).
+* **Получить telegram токен для работы с Bot API** - токен отправляется при создании вашего бота. Пример токена: `123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11`. 
 * **Получить ID своего Telegram-аккаунта** - для этого используется служебный бот `@userinfobot`, которому нужно отправить `@username`, где `username` - имя пользователя Telegram. Пример chat_id: `1073236156`
 * **Получить токен от API сервиса Яндекс Практикума** - это индивидуальный токен, который связывает API запросы к сервису Яндекс Практикума именно с вашим эккаунтом. Для его получения необходимо пройти по [ссылке](https://oauth.yandex.ru/authorize?response_type=token&client_id=1d0b9dd4d652455a9eb710d450ff456a) и авторизоваться учетными данными, используемыми для доступа к материалам курса Яндекс Практикума. Пример токена: `x3_BgBBBBBgCMRTAAYckQCCCFKFf9hvhUTWgAa4RWhgfdDXNBZXJnp45bW`
+* **Создать файл `.env` в домашней папке пользователя.** Процедура получения значении части переменных описана в разделе **Предварительные условия**. Файл рекомендуется защитить разрешениями. Например: `sudo chmod 600 .env`. Список и описание переменных:
+    - TELEGRAM_TOKEN - токен для отправки сообщения чат-ботом через API.
+    - PRACTICUM_TOKEN - токен для запрсоса состояния домашней работы в API сервиса Яндекс Практикума.
+    - TELEGRAM_CHAT_ID - ID Telegram-эккаунта на который будут отправляться сообщения о смене статуса проверки домашней работы Яндекс Практикума.
+    - ENDPOINT - URL для запроса информации о домашнем задании Яндекс Практикума. Значение: `https://practicum.yandex.ru/api/user_api/homework_statuses/`
+    - RETRY_TIME - интервал в секундах, через которое выполняются запросы к API Яндекс Практикума. Рекомендуемое значение: `600`
+    - MAX_TLGR_MESSAGE_LENGTH - максимальное количество символов, отправляемое получателю в telegram. Все символы, свыше данного количества будут отброшены. Используется при отправке сообщений об ошибке подключения к API Яндекс Практикума. Порог может быть достигнут, если сообщение об ошибке будет расширено (для этого нужно править код). Рекомендуемое значение: `1024`
 
-Developing Vault
+Пример файла `.env`
+
+----
+
+**Примечание**: Токены и chat_id в примере указаны вымышленные. С данными переменными чат-бот работать не будет
+
+----
+
+```sh
+TELEGRAM_TOKEN=123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11
+PRACTICUM_TOKEN=x3_BgBBBBBgCMRTAAYckQCCCFKFf9hvhUTWgAa4RWhgfdDXNBZXJnp45bW
+TELEGRAM_CHAT_ID=1073236156
+ENDPOINT=https://practicum.yandex.ru/api/user_api/homework_statuses/
+RETRY_TIME=600
+MAX_TLGR_MESSAGE_LENGTH=1024
+```
+
+
+Запуск чат-бота в docker контейнере
 --------------------
 
-If you wish to work on Vault itself or any of its built-in systems, you'll
-first need [Go](https://www.golang.org) installed on your machine. Go version
-1.19.1+ is *required*.
+----
 
-For local dev first make sure Go is properly installed, including setting up a
-[GOPATH](https://golang.org/doc/code.html#GOPATH). Ensure that `$GOPATH/bin` is in
-your path as some distributions bundle the old version of build tools. Next, clone this
-repository. Vault uses [Go Modules](https://github.com/golang/go/wiki/Modules),
-so it is recommended that you clone the repository ***outside*** of the GOPATH.
-You can then download any required build tools by bootstrapping your environment:
+*Инструкции тестировалитсь в ОС `Ubuntu 20.04.3 LTS`
+**Предполагается, что все необходимые действия, опиасанные в разделе **Предварительные условия** выполнены.
 
+----
+* **Установить Docker Engine** - инструкция по установке с [официального сайта](https://docs.docker.com/engine/install/). 
+* **Скачать образ чат-бота в локальное Docker хранилище**
 ```sh
-$ make bootstrap
-...
+docker pull rlukovnikov/ya-hw-bot
+```
+* **Назначить дополнительных тэг для Docker образа (необязательный шаг)**
+```sh
+docker tag rlukovnikov/ya-hw-bot yabot
+```
+* **Создать и запустить контейнер**
+```sh
+docker run --name yabot --env-file .env --restart always --detach yabot
+```
+* **Изучить журналы запуска контейнера**
+```sh
+docker logs yabot
+```
+Если все параметры настроены правильно, должны появиться следующие строчки в журнале (время будет актуальным):
+```sh
+2022-09-18 06:25:53,507 - INFO - Request Homework Yandex API
+2022-09-18 06:25:54,097 - INFO - Response reseived from Homework Yandex API
+2022-09-18 06:25:54,097 - INFO - No changes in homework status detected
 ```
 
-To compile a development version of Vault, run `make` or `make dev`. This will
-put the Vault binary in the `bin` and `$GOPATH/bin` folders:
-
-```sh
-$ make dev
-...
-$ bin/vault
-...
-```
-
-To compile a development version of Vault with the UI, run `make static-dist dev-ui`. This will
-put the Vault binary in the `bin` and `$GOPATH/bin` folders:
-
-```sh
-$ make static-dist dev-ui
-...
-$ bin/vault
-...
-```
-
-To run tests, type `make test`. Note: this requires Docker to be installed. If
-this exits with exit status 0, then everything is working!
-
-```sh
-$ make test
-...
-```
-
-If you're developing a specific package, you can run tests for just that
-package by specifying the `TEST` variable. For example below, only
-`vault` package tests will be run.
-
-```sh
-$ make test TEST=./vault
-...
-```
-
-### Acceptance Tests
-
-Vault has comprehensive [acceptance tests](https://en.wikipedia.org/wiki/Acceptance_testing)
-covering most of the features of the secret and auth methods.
-
-If you're working on a feature of a secret or auth method and want to
-verify it is functioning (and also hasn't broken anything else), we recommend
-running the acceptance tests.
-
-**Warning:** The acceptance tests create/destroy/modify *real resources*, which
-may incur real costs in some cases. In the presence of a bug, it is technically
-possible that broken backends could leave dangling data behind. Therefore,
-please run the acceptance tests at your own risk. At the very least,
-we recommend running them in their own private account for whatever backend
-you're testing.
-
-To run the acceptance tests, invoke `make testacc`:
-
-```sh
-$ make testacc TEST=./builtin/logical/consul
-...
-```
-
-The `TEST` variable is required, and you should specify the folder where the
-backend is. The `TESTARGS` variable is recommended to filter down to a specific
-resource to test, since testing all of them at once can sometimes take a very
-long time.
-
-Acceptance tests typically require other environment variables to be set for
-things such as access keys. The test itself should error early and tell
-you what to set, so it is not documented here.
-
-For more information on Vault Enterprise features, visit the [Vault Enterprise site](https://www.hashicorp.com/products/vault/?utm_source=github&utm_medium=referral&utm_campaign=github-vault-enterprise).
+Запуск чат-бота как сервиса ОС
+--------------------
