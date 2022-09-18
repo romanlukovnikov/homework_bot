@@ -102,6 +102,7 @@ source venv/bin/activate
 ```
 * **Установить зависимости проекта в виртуальное окружение**
 ```sh
+cd homework_bot/
 pip3 install -r requirements.txt
 ```
 * **Запустить программу**
