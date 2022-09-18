@@ -77,6 +77,7 @@ docker logs yabot
 2022-09-18 06:25:54,097 - INFO - Response reseived from Homework Yandex API
 2022-09-18 06:25:54,097 - INFO - No changes in homework status detected
 ```
+
 Запуск чат-бота в командной оболочке Linux (подходит для разработки и тестирования)
 --------------------
 
